@@ -676,9 +676,9 @@ static bool shim_lib_matches(const char *shim_lib, const char *realpath) {
 }
 
 template<typename F>
-static bool shim_libs_for_each(const char *const path, F action) {
-  if (path == nullptr) return true;
-  INFO("finding shim libs for \"%s\"\n", path);
+static void shim_libs_for_each(const char *const path, F action) {
+  if (path == nullptr) return;
+  INFO("Finding shim libs for \"%s\"\n", path);
   std::vector<const std::string *> matched;
 
   g_active_shim_libs.for_each([&](const std::string *a_pair) {
@@ -696,12 +696,14 @@ static bool shim_libs_for_each(const char *const path, F action) {
   for (const auto& one_pair : matched) {
     const char* const pair = one_pair->c_str();
     const char* sep = strchr(pair, '|');
-    INFO("found shim lib \"%s\"\n", sep+1);
     soinfo *child = find_library(sep+1, RTLD_GLOBAL, nullptr);
-    if (! child) return false;
-    action(child);
+    if (child) {
+      INFO("Using shim lib \"%s\"\n", sep+1);
+      action(child);
+    } else {
+      PRINT("Shim lib \"%s\" can not be loaded, ignoring.", sep+1);
+    }
   }
-  return true;
 }
 
 // This function walks down the tree of soinfo dependencies
@@ -742,8 +744,7 @@ static bool walk_dependencies_tree(soinfo* root_soinfo, F action) {
 
     if (!shim_libs_for_each(si->get_realpath(), [&](soinfo* child) {
         visit_list.push_back(child);
-      })) {
-      return false;
+      });
     }
   }
 
