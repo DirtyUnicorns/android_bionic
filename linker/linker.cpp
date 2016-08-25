@@ -644,7 +644,10 @@ enum walk_action_result_t : uint32_t {
   kWalkSkip = 2
 };
 
-static soinfo* find_library(const char* name, int rtld_flags, const android_dlextinfo* extinfo);
+static soinfo* find_library(android_namespace_t* ns,
+                           const char* name, int rtld_flags,
+                           const android_dlextinfo* extinfo,
+                           soinfo* needed_by);
 
 // g_ld_all_shim_libs maintains the references to memory as it used
 // in the soinfo structures and in the g_active_shim_libs list.
@@ -696,7 +699,7 @@ static void shim_libs_for_each(const char *const path, F action) {
   for (const auto& one_pair : matched) {
     const char* const pair = one_pair->c_str();
     const char* sep = strchr(pair, '|');
-    soinfo *child = find_library(sep+1, RTLD_GLOBAL, nullptr);
+    soinfo *child = find_library(&g_default_namespace, sep+1, RTLD_GLOBAL, nullptr, nullptr);
     if (child) {
       INFO("Using shim lib \"%s\"\n", sep+1);
       action(child);
