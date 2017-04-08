@@ -645,22 +645,14 @@ enum walk_action_result_t : uint32_t {
 };
 
 #ifdef LD_SHIM_LIBS
-static soinfo* find_library(android_namespace_t* ns,
-                           const char* name, int rtld_flags,
-                           const android_dlextinfo* extinfo,
-                           soinfo* needed_by);
-
 // g_ld_all_shim_libs maintains the references to memory as it used
 // in the soinfo structures and in the g_active_shim_libs list.
-
-typedef std::pair<std::string, std::string> ShimDescriptor;
 static std::vector<ShimDescriptor> g_ld_all_shim_libs;
 
 // g_active_shim_libs are all shim libs that are still eligible
 // to be loaded.  We must remove a shim lib from the list before
 // we load the library to avoid recursive loops (load shim libA
 // for libB where libA also links against libB).
-
 static linked_list_t<const ShimDescriptor> g_active_shim_libs;
 
 static void reset_g_active_shim_libs(void) {
@@ -670,48 +662,46 @@ static void reset_g_active_shim_libs(void) {
   }
 }
 
-static void parse_shim_libs(const char* path) {
+void parse_LD_SHIM_LIBS(const char* path) {
+  g_ld_all_shim_libs.clear();
   if (path != nullptr) {
-    // We have historically supported ':' as well as ' ' in LD_SHIM_LIBS.
-    for (const auto& pair : android::base::Split(path, " :")) {
-      size_t pos = pair.find('|');
-      if (pos > 0 && pos < pair.length() - 1) {
-        auto desc = std::pair<std::string, std::string>(pair.substr(0, pos), pair.substr(pos + 1));
-        g_ld_all_shim_libs.push_back(desc);
+    for (const auto& pair : android::base::Split(path, ":")) {
+      std::vector<std::string> pieces = android::base::Split(pair, "|");
+      if (pieces.size() != 2) continue;
+      // If the path can be resolved, resolve it
+      char buf[PATH_MAX];
+      std::string resolved_path = pieces[0];
+      if (access(pieces[0].c_str(), R_OK) != 0) {
+        if (errno == ENOENT) {
+          // no need to test for non-existing path. skip.
+          continue;
+        }
+        // If not accessible, don't call realpath as it will just cause
+        // SELinux denial spam. Use the path unresolved.
+      } else if (realpath(pieces[0].c_str(), buf) != nullptr) {
+        resolved_path = buf;
       }
+      auto desc = std::pair<std::string, std::string>(resolved_path, pieces[1]);
+      g_ld_all_shim_libs.push_back(desc);
     }
   }
   reset_g_active_shim_libs();
 }
 
-static void parse_LD_SHIM_LIBS(const char* path) {
-  g_ld_all_shim_libs.clear();
-#ifdef FORCED_SHIM_LIBS
-  parse_shim_libs(FORCED_SHIM_LIBS);
-#endif
-  parse_shim_libs(path);
-}
+std::vector<const ShimDescriptor*> shim_matching_pairs(const char* path) {
+  std::vector<const ShimDescriptor*> matched_pairs;
 
-template<typename F>
-static void for_each_matching_shim(const char *const path, F action) {
-  if (path == nullptr) return;
-  INFO("Finding shim libs for \"%s\"\n", path);
-  std::vector<const ShimDescriptor *> matched;
-
-  g_active_shim_libs.for_each([&](const ShimDescriptor *a_pair) {
+  g_active_shim_libs.for_each([&](const ShimDescriptor* a_pair) {
     if (a_pair->first == path) {
-      matched.push_back(a_pair);
+      matched_pairs.push_back(a_pair);
     }
   });
 
-  g_active_shim_libs.remove_if([&](const ShimDescriptor *a_pair) {
+  g_active_shim_libs.remove_if([&](const ShimDescriptor* a_pair) {
     return a_pair->first == path;
   });
 
-  for (const auto& one_pair : matched) {
-    INFO("Injecting shim lib \"%s\" as needed for %s", one_pair->second.c_str(), path);
-    action(one_pair->second.c_str());
-  }
+  return matched_pairs;
 }
 #endif
 
@@ -1147,7 +1137,6 @@ const char* fix_dt_needed(const char* dt_needed, const char* sopath __unused) {
 
 template<typename F>
 static void for_each_dt_needed(const ElfReader& elf_reader, F action) {
-  for_each_matching_shim(si->get_realpath(), action);
   for (const ElfW(Dyn)* d = elf_reader.dynamic(); d->d_tag != DT_NULL; ++d) {
     if (d->d_tag == DT_NEEDED) {
       action(fix_dt_needed(elf_reader.get_string(d->d_un.d_val), elf_reader.name()));
