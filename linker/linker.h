@@ -77,6 +77,10 @@ soinfo* find_containing_library(const void* p);
 
 int open_executable(const char* path, off64_t* file_offset, std::string* realpath);
 
+#ifdef LD_SHIM_LIBS
+void parse_LD_SHIM_LIBS(const char* path);
+#endif
+
 void do_android_get_LD_LIBRARY_PATH(char*, size_t);
 void do_android_update_LD_LIBRARY_PATH(const char* ld_library_path);
 void* do_dlopen(const char* name,

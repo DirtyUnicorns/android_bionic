@@ -417,6 +417,11 @@ static ElfW(Addr) linker_main(KernelArgumentBlock& args, const char* exe_to_load
   parse_LD_LIBRARY_PATH(ldpath_env);
   parse_LD_PRELOAD(ldpreload_env);
 
+#ifdef LD_SHIM_LIBS
+  // Read from TARGET_LD_SHIM_LIBS
+  parse_LD_SHIM_LIBS(LD_SHIM_LIBS);
+#endif
+
   std::vector<android_namespace_t*> namespaces = init_default_namespaces(exe_info.path.c_str());
 
   if (!si->prelink_image()) __linker_cannot_link(g_argv[0]);

@@ -644,6 +644,7 @@ enum walk_action_result_t : uint32_t {
   kWalkSkip = 2
 };
 
+#ifdef LD_SHIM_LIBS
 static soinfo* find_library(android_namespace_t* ns,
                            const char* name, int rtld_flags,
                            const android_dlextinfo* extinfo,
@@ -712,6 +713,7 @@ static void for_each_matching_shim(const char *const path, F action) {
     action(one_pair->second.c_str());
   }
 }
+#endif
 
 // This function walks down the tree of soinfo dependencies
 // in breadth-first order and
@@ -1347,6 +1349,10 @@ static bool load_library(android_namespace_t* ns,
   if (si->get_dt_runpath().empty()) {
     si->set_dt_runpath("$ORIGIN/../lib64:$ORIGIN/lib64");
   }
+#endif
+
+#ifdef LD_SHIM_LIBS
+  for_each_matching_shim(elf_reader.name(), action);
 #endif
 
   for_each_dt_needed(task->get_elf_reader(), [&](const char* name) {
@@ -2251,7 +2257,9 @@ void* do_dlopen(const char* name, int flags,
   }
 
   ProtectedDataGuard guard;
+#ifdef LD_SHIM_LIBS
   reset_g_active_shim_libs();
+#endif
   soinfo* si = find_library(ns, translated_name, flags, extinfo, caller);
   loading_trace.End();
 
