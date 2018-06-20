@@ -1352,7 +1352,9 @@ static bool load_library(android_namespace_t* ns,
 #endif
 
 #ifdef LD_SHIM_LIBS
-  for_each_matching_shim(elf_reader.name(), action);
+  for_each_matching_shim(realpath.c_str(), [&](const char* name) {
+    load_tasks->push_back(LoadTask::create(name, si, ns, task->get_readers_map()));
+  });
 #endif
 
   for_each_dt_needed(task->get_elf_reader(), [&](const char* name) {
